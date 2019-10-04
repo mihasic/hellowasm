@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en-us">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <title>Hydraulics engine test</title>
+  <style>
+    textarea {
+      width: 100%;
+      height: 500px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="status">Downloading...</div>
+
+  <table width='100%' height='80hv'>
+    <thead>
+      <tr>
+        <th></th>
+        <th><button onclick="launch()">run</button></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td width='50%'>
+          <textarea id='inputText'></textarea>
+        </td>
+        <td width='50%'>
+            <textarea id='outputText' readonly></textarea>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <script type='text/javascript'>
+    var statusElement = document.getElementById('status');
+    var inputElement = document.getElementById('inputText');
+    var outputElement = document.getElementById('outputText');
+
+    var STDOUT = [],
+      STDERR = [],
+      FILE_DATA = "/tmp/data.json",
+      OUTFILE_DATA = "/tmp/result.json",
+      CONFIG_EDITOR = {
+        mode: "ace/mode/json",
+        selectionStyle: "text",
+        tabSize: 2
+      };
+    var Module = {
+      noInitialRun: true,
+      preRun: [],
+      postRun: [],
+      print: (function () {
+        return function (text) {
+          if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+          // These replacements are necessary if you render to raw HTML
+          //text = text.replace(/&/g, "&amp;");
+          //text = text.replace(/</g, "&lt;");
+          //text = text.replace(/>/g, "&gt;");
+          //text = text.replace('\n', '<br>', 'g');
+          console.log(text);
+        };
+      })(),
+      printErr: function (text) {
+        if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+        console.error(text);
+      },
+      setStatus: function (text) {
+        if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
+        if (text === Module.setStatus.last.text) return;
+        var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+        var now = Date.now();
+        if (m && now - Module.setStatus.last.time < 30) return; // if this is a progress update, skip it if too soon
+        Module.setStatus.last.time = now;
+        Module.setStatus.last.text = text;
+        if (m) {
+          text = m[1];
+        } else {
+        }
+        statusElement.innerHTML = text;
+      },
+      totalDependencies: 0,
+      monitorRunDependencies: function (left) {
+        this.totalDependencies = Math.max(this.totalDependencies, left);
+        Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+      }
+    };
+    Module.setStatus('Downloading...');
+    window.onerror = function (event) {
+      // TODO: do not warn on ok events like simulating an infinite loop or exitStatus
+      Module.setStatus('Exception thrown, see JavaScript console');
+      Module.setStatus = function (text) {
+        if (text) Module.printErr('[post-exception status] ' + text);
+      };
+    };
+    function hello(input) {
+      FS.writeFile(FILE_DATA, input);
+      // Clear previous stdout/stderr before launching jq
+      STDOUT = [];
+      STDERR = [];
+      const options = [ FILE_DATA, OUTFILE_DATA ];
+      Module.callMain(options);
+      // FS.streams[1] = FS.open("/dev/stdout", "w");
+      // FS.streams[2] = FS.open("/dev/stderr", "w");
+      return {
+        // stdout: STDOUT.join("\n"),
+        // stderr: `${STDERR[0]}\n${STDERR[1]}`,
+        output: FS.readFile(OUTFILE_DATA, { encoding: 'utf8' })
+      };
+    }
+    function launch() {
+      const input = inputElement.value;
+      const r = hello(input);
+      outputElement.value = r.output;
+    }
+  </script>
+  <script async type="text/javascript" src="out/hello.js"></script>
+</body>
+
+</html>
